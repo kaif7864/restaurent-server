@@ -1,0 +1,230 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Restaurant {
+  id          String   @id @default(uuid())
+  name        String
+  email       String
+  phone       String?
+  address     String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  tables      RestaurantTable[]
+  categories  MenuCategory[]
+  items       MenuItem[]
+  orders      Order[]
+  reservations Reservation[]
+  waitlists    Waitlist[]
+  bills        Bill[]
+}
+
+model User {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  name          String
+  email         String   @unique
+  passwordHash  String
+  role          String   @default("waiter") // owner, manager, host, waiter, bartender, cook, expo, busser, cashier
+  pinCode       String?
+  resetToken    String?
+  resetTokenExpiry DateTime?
+  isActive      Boolean  @default(true)
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model RestaurantTable {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  name          String   // e.g., "T-12"
+  capacity      Int      @default(4)
+  status        String   @default("available") // available, reserved, occupied, payment_pending, needs_cleaning, cleaning
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions      TableSession[]
+  orders        Order[]
+  reservations  Reservation[]
+}
+
+model TableSession {
+  id            String   @id @default(uuid())
+  tableId       String
+  table         RestaurantTable @relation(fields: [tableId], references: [id])
+  status        String   @default("active") // active, closed
+  guestCount    Int      @default(1)
+  openedAt      DateTime @default(now())
+  closedAt      DateTime?
+  metadata      Json     @default("{}")
+
+  orders        Order[]
+  bills         Bill[]
+}
+
+model MenuCategory {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  name          String
+  description   String?
+  type          String   @default("food") // food, drink
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items         MenuItem[]
+}
+
+model MenuItem {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  categoryId    String
+  category      MenuCategory @relation(fields: [categoryId], references: [id])
+  name          String
+  description   String?
+  price         Decimal  @db.Decimal(10, 2)
+  isAvailable   Boolean  @default(true)
+  imageUrl      String?
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orderItems    OrderItem[]
+  modifierGroups ModifierGroup[]
+}
+
+model ModifierGroup {
+  id            String   @id @default(uuid())
+  menuItemId    String
+  menuItem      MenuItem @relation(fields: [menuItemId], references: [id])
+  name          String   // e.g., "Add-ons", "Size"
+  isRequired    Boolean  @default(false)
+  maxSelections Int?
+  options       ModifierOption[]
+}
+
+model ModifierOption {
+  id              String   @id @default(uuid())
+  modifierGroupId String
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id])
+  name            String   // e.g., "Extra Cheese", "Large"
+  price           Decimal  @default(0) @db.Decimal(10, 2)
+  isAvailable     Boolean  @default(true)
+}
+
+model Order {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  tableId       String?
+  table         RestaurantTable? @relation(fields: [tableId], references: [id])
+  sessionId     String?
+  session       TableSession? @relation(fields: [sessionId], references: [id])
+  billId        String?
+  bill          Bill? @relation(fields: [billId], references: [id])
+  orderNumber   String?
+  status        String   @default("new") // new, preparing, partially_ready, ready_for_expo, completed, served, paid, voided
+  orderType     String   @default("dine_in") // dine_in, takeout, delivery
+  subtotal      Decimal  @default(0) @db.Decimal(10, 2)
+  taxTotal      Decimal  @default(0) @db.Decimal(10, 2)
+  total         Decimal  @default(0) @db.Decimal(10, 2)
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items         OrderItem[]
+}
+
+model Bill {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  sessionId     String
+  session       TableSession @relation(fields: [sessionId], references: [id])
+  status        String   @default("open") // open, generated, payment_pending, paid
+  subtotal      Decimal  @default(0) @db.Decimal(10, 2)
+  taxTotal      Decimal  @default(0) @db.Decimal(10, 2)
+  total         Decimal  @default(0) @db.Decimal(10, 2)
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orders        Order[]
+  payments      Payment[]
+}
+
+model OrderItem {
+  id            String   @id @default(uuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  itemId        String
+  item          MenuItem @relation(fields: [itemId], references: [id])
+  quantity      Int      @default(1)
+  unitPrice     Decimal  @db.Decimal(10, 2)
+  totalPrice    Decimal  @db.Decimal(10, 2)
+  notes         String?
+  status        String   @default("new") // new, preparing, ready, ready_to_serve, served
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  billId        String
+  bill          Bill     @relation(fields: [billId], references: [id])
+  amount        Decimal  @db.Decimal(10, 2)
+  method        String   // cash, card, upi
+  status        String   @default("completed") // pending, completed, failed, refunded
+  transactionId String?
+  createdAt     DateTime @default(now())
+}
+
+model Reservation {
+  id              String   @id @default(uuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
+  customerName    String
+  customerPhone   String
+  customerEmail   String?
+  date            DateTime // Day of reservation
+  time            String   // e.g. "19:30"
+  guestCount      Int
+  status          String   @default("pending") // pending, confirmed, cancelled, completed, no_show
+  tableId         String?
+  table           RestaurantTable? @relation(fields: [tableId], references: [id])
+  specialRequests String?
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Waitlist {
+  id              String   @id @default(uuid())
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
+  customerName    String
+  customerPhone   String
+  guestCount      Int
+  status          String   @default("waiting") // waiting, seated, cancelled, no_show
+  quotedTime      Int      // quoted wait time in minutes
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
