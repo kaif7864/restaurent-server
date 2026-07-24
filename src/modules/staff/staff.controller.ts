@@ -40,3 +40,44 @@ export const deleteStaff = async (req: Request, res: Response) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
+
+export const clockIn = async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.user!.restaurantId;
+    const log = await StaffService.clockIn(restaurantId, req.params.id);
+    res.status(201).json({ success: true, data: log });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const clockOut = async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.user!.restaurantId;
+    const log = await StaffService.clockOut(restaurantId, req.params.id);
+    res.json({ success: true, data: log });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const getTimeLogs = async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.user!.restaurantId;
+    const userId = req.query.userId as string;
+    const logs = await StaffService.getTimeLogs(restaurantId, userId);
+    res.json({ success: true, data: logs });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const getAuditLogs = async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.user!.restaurantId;
+    const logs = await StaffService.getAuditLogs(restaurantId);
+    res.json({ success: true, data: logs });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};

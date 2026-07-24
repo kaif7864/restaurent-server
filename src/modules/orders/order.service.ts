@@ -23,7 +23,15 @@ export const createOrder = async (restaurantId: string, data: any) => {
 
   let subtotal = 0;
   const orderItemsData = items.map((item: any) => {
-    const unitPrice = priceMap.get(item.itemId) || 0;
+    const baseUnitPrice = priceMap.get(item.itemId) || 0;
+    
+    let modifiersPrice = 0;
+    const modifiers = item.metadata?.modifiers || item.selectedModifiers;
+    if (modifiers && Array.isArray(modifiers)) {
+      modifiersPrice = modifiers.reduce((sum: number, mod: any) => sum + Number(mod.price), 0);
+    }
+    
+    const unitPrice = baseUnitPrice + modifiersPrice;
     const totalPrice = unitPrice * item.quantity;
     subtotal += totalPrice;
     
@@ -33,7 +41,10 @@ export const createOrder = async (restaurantId: string, data: any) => {
       unitPrice,
       totalPrice,
       notes: item.notes,
-      status: item.initialStatus || data.initialStatus || 'sent' 
+      seatNumber: item.seatNumber,
+      course: item.course,
+      status: item.initialStatus || data.initialStatus || 'sent',
+      metadata: modifiers ? { modifiers } : {}
     };
   });
 
@@ -41,8 +52,8 @@ export const createOrder = async (restaurantId: string, data: any) => {
   const total = subtotal + taxTotal;
 
   // Handle Table Session logic
-  let sessionId = null;
-  if (tableId) {
+  let sessionId = data.sessionId || null;
+  if (tableId && !sessionId) {
     // Find active session
     let session = await prisma.tableSession.findFirst({
       where: { tableId, status: 'active' }
@@ -108,7 +119,10 @@ export const getActiveOrders = async (restaurantId: string, type?: 'food' | 'dri
     },
     include: {
       items: {
-        where: type && type !== 'all' ? { item: { category: { type } } } : undefined,
+        where: {
+          status: { notIn: ['voided'] },
+          ...(type && type !== 'all' ? { item: { category: { type } } } : {})
+        },
         include: {
           item: {
             include: { category: true }
@@ -156,14 +170,32 @@ export const updateOrderStatus = async (restaurantId: string, orderId: string, s
       data: { status }
     });
 
-    // If order is served or ready_to_serve, mark all non-served items accordingly
+    // If order is served or ready_to_serve, mark items accordingly
     if (status === 'served' || status === 'ready_to_serve') {
       await tx.orderItem.updateMany({
-        where: { orderId: orderId, status: { notIn: ['served', 'ready_to_serve'] } },
+        where: { orderId: orderId, status: { not: status } },
         data: { status }
       });
     }
 
     return updatedOrder;
+  });
+};
+
+export const getAllOrders = async (restaurantId: string) => {
+  return await prisma.order.findMany({
+    where: { restaurantId },
+    include: {
+      items: {
+        include: {
+          item: {
+            include: { category: true }
+          }
+        }
+      },
+      table: true
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 200 // limit to last 200 for performance
   });
 };

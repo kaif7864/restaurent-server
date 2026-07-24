@@ -74,7 +74,72 @@ export const getBillPayments = async (req: Request, res: Response) => {
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: 'Failed to fetch payments',
+      message: error.message || 'Failed to fetch payments',
     });
+  }
+};
+
+export const createCashfreeLink = async (req: Request, res: Response) => {
+  try {
+    const { amount, billId } = req.body;
+    const appId = process.env.CASHFREE_APP_ID;
+    const secretKey = process.env.CASHFREE_SECRET_KEY;
+
+    if (!appId || !secretKey) {
+      return res.status(400).json({ success: false, message: 'Cashfree credentials not configured' });
+    }
+
+    const payload = {
+      link_id: `link_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+      link_amount: amount,
+      link_currency: 'INR',
+      link_purpose: billId ? `Payment for Bill ${billId}` : 'Direct Order Payment',
+      customer_details: {
+        customer_phone: '9999999999',
+        customer_name: 'Customer'
+      },
+      link_notify: { send_sms: false, send_email: false }
+    };
+
+    const response = await fetch('https://sandbox.cashfree.com/pg/links', {
+      method: 'POST',
+      headers: {
+        'x-client-id': appId,
+        'x-client-secret': secretKey,
+        'x-api-version': '2023-08-01',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Failed to create payment link');
+
+    res.json({ success: true, link_url: data.link_url, link_id: data.link_id });
+  } catch (error: any) {
+    console.error('Cashfree Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const checkCashfreeStatus = async (req: Request, res: Response) => {
+  try {
+    const { linkId } = req.params;
+    const appId = process.env.CASHFREE_APP_ID;
+    const secretKey = process.env.CASHFREE_SECRET_KEY;
+
+    const response = await fetch(`https://sandbox.cashfree.com/pg/links/${linkId}`, {
+      method: 'GET',
+      headers: {
+        'x-client-id': appId as string,
+        'x-client-secret': secretKey as string,
+        'x-api-version': '2023-08-01'
+      }
+    });
+
+    const data = await response.json();
+    res.json({ success: true, status: data.link_status }); // 'PAID', 'ACTIVE', etc.
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

@@ -65,4 +65,58 @@ export class StaffService {
     // We shouldn't delete users to keep history, maybe just deactivate them, but if user wants delete:
     return prisma.user.delete({ where: { id: userId } });
   }
+
+  static async clockIn(restaurantId: string, userId: string) {
+    // Check if already clocked in (no clockOut)
+    const activeLog = await (prisma as any).timeLog.findFirst({
+      where: { restaurantId, userId, clockOut: null }
+    });
+    if (activeLog) {
+      throw new Error('Already clocked in');
+    }
+    return (prisma as any).timeLog.create({
+      data: { restaurantId, userId }
+    });
+  }
+
+  static async clockOut(restaurantId: string, userId: string) {
+    const activeLog = await (prisma as any).timeLog.findFirst({
+      where: { restaurantId, userId, clockOut: null }
+    });
+    if (!activeLog) {
+      throw new Error('Not clocked in');
+    }
+    return (prisma as any).timeLog.update({
+      where: { id: activeLog.id },
+      data: { clockOut: new Date() }
+    });
+  }
+
+  static async getTimeLogs(restaurantId: string, userId?: string) {
+    const where: any = { restaurantId };
+    if (userId) where.userId = userId;
+
+    return (prisma as any).timeLog.findMany({
+      where,
+      include: {
+        user: {
+          select: { name: true, role: true }
+        }
+      },
+      orderBy: { clockIn: 'desc' }
+    });
+  }
+
+  static async getAuditLogs(restaurantId: string) {
+    return (prisma as any).auditLog.findMany({
+      where: { restaurantId },
+      include: {
+        user: {
+          select: { name: true, role: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    });
+  }
 }

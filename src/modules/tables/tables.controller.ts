@@ -54,6 +54,7 @@ export const deleteTable = async (req: Request, res: Response) => {
     if (error.code === 'P2025') {
       return res.status(404).json({ success: false, message: 'Table not found' });
     }
-    res.status(500).json({ success: false, message: error.message });
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ success: false, message: error.message });
   }
 };

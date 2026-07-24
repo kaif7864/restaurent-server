@@ -64,6 +64,21 @@ router.get('/', orderController.getActiveOrders);
 
 /**
  * @openapi
+ * /api/v1/orders/history:
+ *   get:
+ *     tags:
+ *       - Orders
+ *     summary: Get all orders history
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of all orders
+ */
+router.get('/history', requireRole(['owner', 'manager']), orderController.getAllOrders);
+
+/**
+ * @openapi
  * /api/v1/orders/items/{itemId}/status:
  *   patch:
  *     tags:
@@ -93,8 +108,9 @@ router.get('/', orderController.getActiveOrders);
  *         description: Item status updated
  */
 // Only kitchen staff, managers, and owners can update item prep status
-router.patch('/items/:itemId/status', requireRole(['cook', 'bartender', 'expo', 'kitchen', 'manager', 'owner']), orderController.updateItemStatus);
+router.patch('/items/:itemId/status', requireRole(['cook', 'bartender', 'expo', 'kitchen', 'manager', 'owner', 'waiter']), orderController.updateItemStatus);
 
 router.patch('/:orderId/status', requireRole(['expo', 'manager', 'owner', 'waiter']), orderController.updateOrderStatus);
+router.post('/:orderId/pay', requireRole(['manager', 'owner', 'cashier']), orderController.payDirectOrder);
 
 export default router;

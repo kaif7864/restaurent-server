@@ -81,4 +81,21 @@ export class BillService {
       include: { payments: true }
     });
   }
+
+  static async getAllBills(restaurantId: string) {
+    return prisma.bill.findMany({
+      where: { restaurantId },
+      include: {
+        session: {
+          include: { table: true }
+        },
+        orders: {
+          include: { items: { include: { item: true } } }
+        },
+        payments: true
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200 // limit to last 200 for performance
+    });
+  }
 }

@@ -27,6 +27,20 @@ export class ReservationService {
     // If tableId is empty string, make it undefined
     const tableId = data.tableId === '' ? undefined : data.tableId;
     
+    if (tableId) {
+      const existing = await prisma.reservation.findFirst({
+        where: {
+          tableId,
+          date: new Date(data.date),
+          time: data.time,
+          status: { notIn: ['cancelled', 'completed', 'no_show'] }
+        }
+      });
+      if (existing) {
+        throw new Error('Table is already reserved for this time.');
+      }
+    }
+
     const reservation = await prisma.reservation.create({
       data: {
         restaurantId,
@@ -61,6 +75,22 @@ export class ReservationService {
     
     if (data.date) {
       data.date = new Date(data.date);
+    }
+
+    // Check double booking on update
+    if (data.tableId && data.date && data.time) {
+      const existing = await prisma.reservation.findFirst({
+        where: {
+          id: { not: id },
+          tableId: data.tableId,
+          date: data.date,
+          time: data.time,
+          status: { notIn: ['cancelled', 'completed', 'no_show'] }
+        }
+      });
+      if (existing) {
+        throw new Error('Table is already reserved for this time.');
+      }
     }
 
     const reservation = await prisma.reservation.update({

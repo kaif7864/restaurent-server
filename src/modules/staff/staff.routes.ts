@@ -12,4 +12,12 @@ router.post('/', staffController.createStaff);
 router.put('/:id', staffController.updateStaff);
 router.delete('/:id', staffController.deleteStaff);
 
+// Time clock routes
+router.get('/time-logs', staffController.getTimeLogs);
+router.post('/:id/clock-in', staffController.clockIn);
+router.post('/:id/clock-out', staffController.clockOut);
+
+// Audit logs
+router.get('/audit-logs', staffController.getAuditLogs);
+
 export default router;

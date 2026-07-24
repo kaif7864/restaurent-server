@@ -40,3 +40,22 @@ export const generateBill = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const getAllBills = async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.user?.restaurantId;
+    if (!restaurantId) throw new Error('Unauthorized');
+    
+    const bills = await BillService.getAllBills(restaurantId);
+    
+    return res.status(200).json({
+      success: true,
+      data: bills,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch bills',
+    });
+  }
+};

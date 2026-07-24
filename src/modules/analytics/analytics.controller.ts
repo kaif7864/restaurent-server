@@ -10,3 +10,13 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
+
+export const getZReport = async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.user!.restaurantId;
+    const report = await AnalyticsService.getZReport(restaurantId);
+    res.json({ success: true, data: report });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};

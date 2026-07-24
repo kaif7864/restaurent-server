@@ -8,5 +8,7 @@ router.use(requireAuth);
 
 router.get('/active', sessionController.getActiveSessions);
 router.post('/', sessionController.createSession);
+router.post('/:sessionId/bill', sessionController.generateBill);
+router.post('/:sessionId/transfer', sessionController.transferTable);
 
 export default router;

@@ -7,5 +7,6 @@ const router = Router();
 router.use(requireAuth, requireRole(['owner', 'manager']));
 
 router.get('/dashboard', analyticsController.getDashboardMetrics);
+router.get('/z-report', analyticsController.getZReport);
 
 export default router;

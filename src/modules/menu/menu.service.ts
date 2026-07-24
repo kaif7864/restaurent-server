@@ -82,6 +82,7 @@ export const createItem = async (restaurantId: string, data: any) => {
       name: data.name,
       description: data.description,
       price: data.price,
+      costPrice: data.costPrice || 0,
       imageUrl: data.imageUrl,
       isAvailable: data.isAvailable,
       categoryId: data.categoryId,
@@ -106,6 +107,7 @@ export const updateItem = async (restaurantId: string, itemId: string, data: any
   if (data.name !== undefined) updateData.name = data.name;
   if (data.description !== undefined) updateData.description = data.description;
   if (data.price !== undefined) updateData.price = data.price;
+  if (data.costPrice !== undefined) updateData.costPrice = data.costPrice;
   if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl;
   if (data.isAvailable !== undefined) updateData.isAvailable = data.isAvailable;
   if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;

@@ -14,6 +14,9 @@ import waitlistRoutes from './modules/waitlist/waitlist.routes';
 import sessionRoutes from './modules/sessions/session.routes';
 import staffRoutes from './modules/staff/staff.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
+import inventoryRoutes from './modules/inventory/inventory.routes';
+import kitchenRoutes from './modules/kitchen/kitchen.routes';
+import restaurantRoutes from './modules/restaurants/restaurants.routes';
 
 const app = express();
 
@@ -52,6 +55,9 @@ app.use('/api/v1/waitlist', waitlistRoutes);
 app.use('/api/v1/sessions', sessionRoutes);
 app.use('/api/v1/staff', staffRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
+app.use('/api/v1/inventory', inventoryRoutes);
+app.use('/api/v1/kitchen', kitchenRoutes);
+app.use('/api/v1/restaurants', restaurantRoutes);
 app.use('/api/v1', paymentRoutes); // Note: payment routes use /orders/:id/payments so it expects /api/v1
 
 // Global Error Handler
