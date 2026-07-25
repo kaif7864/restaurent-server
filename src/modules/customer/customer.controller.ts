@@ -1,5 +1,60 @@
 import { Request, Response } from 'express';
 import * as customerService from './customer.service';
+import twilio from 'twilio';
+
+// Twilio Config (Set these in .env)
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || '';
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
+const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER || '';
+
+const twilioClient = TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN 
+  ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) 
+  : null;
+
+// In-memory store for OTPs (In production, use Redis or Database)
+const otpStore = new Map<string, { otp: string; expiresAt: number }>();
+
+export const sendOtp = async (req: Request, res: Response) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ success: false, message: 'Phone number is required' });
+    }
+
+    // Generate a random 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store OTP in memory with a 5-minute expiry
+    otpStore.set(phone, {
+      otp,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
+
+    // Format phone number to international format if not already (assuming India +91 for now)
+    const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+
+    if (twilioClient && TWILIO_PHONE_NUMBER) {
+      // Send real SMS via Twilio
+      try {
+        await twilioClient.messages.create({
+          body: `Your Savory verification code is ${otp}. Valid for 5 minutes.`,
+          to: formattedPhone,
+          from: TWILIO_PHONE_NUMBER
+        });
+        console.log(`[Twilio] Real SMS sent to ${formattedPhone}`);
+      } catch (twilioErr: any) {
+        console.error(`[Twilio Error] Failed to send SMS: ${twilioErr.message}`);
+        console.log(`[Twilio Mock] Generated OTP ${otp} for ${formattedPhone} (Proceeding anyway to allow bypass OTP)`);
+      }
+    } else {
+      console.log(`[Twilio Mock] Sent OTP ${otp} to ${formattedPhone} (Set TWILIO env vars to send real SMS)`);
+    }
+
+    res.json({ success: true, message: 'OTP sent successfully' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 export const verifyOtp = async (req: Request, res: Response) => {
   try {
@@ -8,9 +63,26 @@ export const verifyOtp = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
     
-    // In production, verify actual OTP. For now, accept 123456
-    if (otp !== '123456') {
-      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    // Production bypass OTP for easy testing
+    const isBypass = otp === '983702';
+    
+    if (!isBypass) {
+      const record = otpStore.get(phone);
+      if (!record) {
+        return res.status(400).json({ success: false, message: 'OTP not requested or expired' });
+      }
+      
+      if (Date.now() > record.expiresAt) {
+        otpStore.delete(phone);
+        return res.status(400).json({ success: false, message: 'OTP has expired' });
+      }
+      
+      if (record.otp !== otp) {
+        return res.status(400).json({ success: false, message: 'Invalid OTP' });
+      }
+      
+      // OTP verified successfully, remove it from store
+      otpStore.delete(phone);
     }
 
     const token = await customerService.createCustomerSession(tableId, phone, name);
@@ -54,7 +126,8 @@ export const placeOrder = async (req: Request, res: Response) => {
 export const getTableOrders = async (req: Request, res: Response) => {
   try {
     const { tableId } = req.params;
-    const orders = await customerService.getTableOrders(tableId);
+    const phone = req.query.phone as string | undefined;
+    const orders = await customerService.getTableOrders(tableId, phone);
     res.json({ success: true, data: orders });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

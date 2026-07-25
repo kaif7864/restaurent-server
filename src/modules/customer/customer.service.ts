@@ -169,7 +169,7 @@ export const createPendingOrder = async (tableIdOrName: string, items: any[], cu
   return order;
 };
 
-export const getTableOrders = async (tableIdOrName: string) => {
+export const getTableOrders = async (tableIdOrName: string, phone?: string) => {
   const table = await prisma.restaurantTable.findFirst({ 
     where: { 
       OR: [
@@ -180,7 +180,7 @@ export const getTableOrders = async (tableIdOrName: string) => {
   });
   if (!table) throw new Error('Table not found');
 
-  const orders = await prisma.order.findMany({
+  let orders = await prisma.order.findMany({
     where: {
       tableId: table.id,
       status: {
@@ -196,6 +196,14 @@ export const getTableOrders = async (tableIdOrName: string) => {
     },
     orderBy: { createdAt: 'desc' }
   });
+
+  if (phone) {
+    // Filter orders to only include those that belong to this phone number
+    orders = orders.filter((o: any) => {
+      const orderPhone = o.metadata?.customerPhone;
+      return orderPhone === phone;
+    });
+  }
 
   return orders;
 };

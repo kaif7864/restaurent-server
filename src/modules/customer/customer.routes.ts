@@ -4,7 +4,8 @@ import * as customerController from './customer.controller';
 const router = Router();
 
 // Public routes for Customer QR App
-// 1. Verify OTP and Create Guest Session
+// 1. Send OTP and Verify OTP (Create Guest Session)
+router.post('/send-otp', customerController.sendOtp);
 router.post('/verify-otp', customerController.verifyOtp);
 
 // 2. Fetch Menu using tableId (which we will map to restaurantId internally)
