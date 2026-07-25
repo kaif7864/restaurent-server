@@ -99,7 +99,7 @@ export const scheduleTableAutoClean = (tableId: string) => {
         if (activeSession) {
           await prisma.tableSession.update({
             where: { id: activeSession.id },
-            data: { status: 'completed', endTime: new Date() }
+            data: { status: 'closed', closedAt: new Date() }
           });
         }
       }
