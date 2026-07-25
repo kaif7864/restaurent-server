@@ -6,7 +6,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
 export interface JwtPayload {
   userId: string;
   restaurantId: string;
-  role: string;
+  roles: string[];
 }
 
 export const generateToken = (payload: JwtPayload): string => {

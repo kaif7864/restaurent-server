@@ -11,7 +11,7 @@ export class StaffService {
         id: true,
         name: true,
         email: true,
-        role: true,
+        roles: true,
         isActive: true,
         createdAt: true,
       }
@@ -30,10 +30,10 @@ export class StaffService {
         name: data.name,
         email: data.email,
         passwordHash,
-        role: data.role,
+        roles: data.roles || (data.role ? [data.role] : ['waiter']),
         isActive: data.isActive !== undefined ? data.isActive : true,
       },
-      select: { id: true, name: true, email: true, role: true }
+      select: { id: true, name: true, email: true, roles: true }
     });
   }
 
@@ -43,7 +43,7 @@ export class StaffService {
 
     const updateData: any = {
       name: data.name,
-      role: data.role,
+      roles: data.roles || (data.role ? [data.role] : undefined),
       isActive: data.isActive,
     };
 
@@ -54,7 +54,7 @@ export class StaffService {
     return prisma.user.update({
       where: { id: userId },
       data: updateData,
-      select: { id: true, name: true, email: true, role: true, isActive: true }
+      select: { id: true, name: true, email: true, roles: true, isActive: true }
     });
   }
 
@@ -100,7 +100,7 @@ export class StaffService {
       where,
       include: {
         user: {
-          select: { name: true, role: true }
+          select: { name: true, roles: true }
         }
       },
       orderBy: { clockIn: 'desc' }
@@ -112,7 +112,7 @@ export class StaffService {
       where: { restaurantId },
       include: {
         user: {
-          select: { name: true, role: true }
+          select: { name: true, roles: true }
         }
       },
       orderBy: { createdAt: 'desc' },

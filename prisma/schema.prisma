@@ -38,7 +38,7 @@ model User {
   name          String
   email         String   @unique
   passwordHash  String
-  role          String   @default("waiter") // owner, manager, host, waiter, bartender, cook, expo, busser, cashier
+  roles         String[] @default(["waiter"]) // owner, manager, host, waiter, bartender, cook, expo, busser, cashier
   pinCode       String?
   resetToken    String?
   resetTokenExpiry DateTime?

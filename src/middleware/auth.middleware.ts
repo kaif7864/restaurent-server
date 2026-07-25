@@ -28,7 +28,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
 
 export const requireRole = (roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user || !req.user.roles.some(role => roles.includes(role))) {
       return res.status(403).json({ success: false, message: 'Access denied: Insufficient permissions' });
     }
     next();

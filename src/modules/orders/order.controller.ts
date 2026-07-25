@@ -60,7 +60,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       await (prisma as any).auditLog.create({
         data: {
           restaurantId,
-          userId: req.user!.id,
+          userId: req.user!.userId,
           action: 'VOID_ORDER',
           details: { orderId, orderNumber: updated.orderNumber },
         }

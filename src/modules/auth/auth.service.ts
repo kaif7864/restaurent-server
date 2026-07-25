@@ -29,7 +29,7 @@ export const registerRestaurant = async (data: any) => {
         name: data.ownerName,
         email: data.email,
         passwordHash: hashedPassword,
-        role: 'owner',
+        roles: ['owner'],
       },
     });
 
@@ -39,7 +39,7 @@ export const registerRestaurant = async (data: any) => {
   const token = generateToken({
     userId: result.user.id,
     restaurantId: result.restaurant.id,
-    role: result.user.role,
+    roles: result.user.roles,
   });
 
   return { user: result.user, token };
@@ -67,7 +67,7 @@ export const loginUser = async (data: any) => {
   const token = generateToken({
     userId: user.id,
     restaurantId: user.restaurantId,
-    role: user.role,
+    roles: user.roles,
   });
 
   return { user, token };

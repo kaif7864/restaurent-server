@@ -40,6 +40,18 @@ export const updateTable = async (tableId: string, restaurantId: string, data: a
     }
   }
 
+  if (data.status === 'available') {
+    const activeSession = await prisma.tableSession.findFirst({
+      where: {
+        tableId,
+        status: 'active'
+      }
+    });
+    if (activeSession) {
+      throw new Error('Cannot set table to available. There is an active order/session on this table. Please checkout the order first.');
+    }
+  }
+
   return await prisma.restaurantTable.update({
     where: { id: tableId, restaurantId },
     data,
