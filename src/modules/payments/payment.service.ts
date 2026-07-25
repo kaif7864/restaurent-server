@@ -58,6 +58,10 @@ export class PaymentService {
             where: { id: bill.session.tableId },
             data: { status: 'needs_cleaning' }
           });
+          
+          // Trigger auto-clean fallback outside transaction
+          const { scheduleTableAutoClean } = require('../tables/tables.service');
+          scheduleTableAutoClean(bill.session.tableId);
         }
       } else {
          // Still partial payment

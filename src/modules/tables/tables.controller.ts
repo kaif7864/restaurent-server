@@ -22,6 +22,9 @@ export const createTable = async (req: Request, res: Response) => {
     if (error.errors) {
       return res.status(400).json({ success: false, errors: error.errors });
     }
+    if (error.message === 'A table with this name already exists') {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };

@@ -80,3 +80,31 @@ export const deleteTable = async (tableId: string, restaurantId: string) => {
     throw error;
   }
 };
+
+export const scheduleTableAutoClean = (tableId: string) => {
+  // Automatically change status from 'needs_cleaning' to 'available' after 2 minutes
+  setTimeout(async () => {
+    try {
+      const table = await prisma.restaurantTable.findUnique({ where: { id: tableId } });
+      if (table && table.status === 'needs_cleaning') {
+        await prisma.restaurantTable.update({
+          where: { id: tableId },
+          data: { status: 'available' }
+        });
+        
+        // Also close the active session if one exists
+        const activeSession = await prisma.tableSession.findFirst({
+          where: { tableId, status: 'active' }
+        });
+        if (activeSession) {
+          await prisma.tableSession.update({
+            where: { id: activeSession.id },
+            data: { status: 'completed', endTime: new Date() }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Auto clean table error:', err);
+    }
+  }, 2 * 60 * 1000); // 2 minutes
+};

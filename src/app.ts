@@ -44,8 +44,11 @@ app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', timestamp: new Date() });
 });
 
+import customerRoutes from './modules/customer/customer.routes';
+
 // API Routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/customer', customerRoutes);
 app.use('/api/v1/menu', menuRoutes);
 app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/upload', uploadRoutes);

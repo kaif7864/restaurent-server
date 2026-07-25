@@ -149,8 +149,9 @@ model Order {
   billId        String?
   bill          Bill? @relation(fields: [billId], references: [id])
   orderNumber   String?
-  status        String   @default("new") // new, preparing, partially_ready, ready_for_expo, completed, served, paid, voided
+  status        String   @default("new") // pending_approval, new, preparing, partially_ready, ready_for_expo, completed, served, paid, voided
   orderType     String   @default("dine_in") // dine_in, takeout, delivery
+  source        String   @default("pos") // pos, customer_qr
   subtotal      Decimal  @default(0) @db.Decimal(10, 2)
   taxTotal      Decimal  @default(0) @db.Decimal(10, 2)
   total         Decimal  @default(0) @db.Decimal(10, 2)

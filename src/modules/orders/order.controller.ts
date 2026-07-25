@@ -102,7 +102,6 @@ export const payDirectOrder = async (req: Request, res: Response) => {
     });
     if (!order) return res.status(404).json({ message: 'Order not found' });
     
-    // We update status to 'paid' and store paymentMethod in metadata
     const metadata = order.metadata || {};
     const updated = await prisma.order.update({
       where: { id: orderId },
@@ -111,6 +110,17 @@ export const payDirectOrder = async (req: Request, res: Response) => {
         metadata: { ...metadata, paymentMethod: method, paidAmount: amount }
       }
     });
+
+    if (order.tableId) {
+      await prisma.restaurantTable.update({
+        where: { id: order.tableId },
+        data: { status: 'needs_cleaning' }
+      });
+      
+      // Auto-clean fallback after 5 minutes
+      const { scheduleTableAutoClean } = require('../tables/tables.service');
+      scheduleTableAutoClean(order.tableId);
+    }
 
     res.json({ success: true, data: updated });
   } catch (error: any) {

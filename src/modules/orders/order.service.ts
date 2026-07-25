@@ -142,15 +142,44 @@ export const updateOrderItemStatus = async (restaurantId: string, orderItemId: s
     where: {
       id: orderItemId,
       order: { restaurantId }
-    }
+    },
+    include: { order: { include: { items: true } } }
   });
 
   if (!item) throw new Error('Order item not found');
 
-  return await prisma.orderItem.update({
+  const updatedItem = await prisma.orderItem.update({
     where: { id: orderItemId },
     data: { status }
   });
+
+  // Re-evaluate parent order status based on all items
+  const allItems = await prisma.orderItem.findMany({ where: { orderId: item.orderId } });
+  
+  let newOrderStatus = item.order.status;
+  
+  if (status === 'sent' || status === 'preparing' || status === 'ready' || status === 'served') {
+    if (newOrderStatus === 'pending_approval' || newOrderStatus === 'new') {
+      newOrderStatus = 'preparing';
+    }
+  }
+  
+  const allVoided = allItems.every(i => i.status === 'voided');
+  if (allVoided) {
+    newOrderStatus = 'voided';
+  } else {
+    const allServed = allItems.every(i => i.status === 'served' || i.status === 'voided');
+    if (allServed) newOrderStatus = 'served';
+  }
+
+  if (newOrderStatus !== item.order.status) {
+    await prisma.order.update({
+      where: { id: item.orderId },
+      data: { status: newOrderStatus }
+    });
+  }
+
+  return updatedItem;
 };
 
 export const updateOrderStatus = async (restaurantId: string, orderId: string, status: string) => {
