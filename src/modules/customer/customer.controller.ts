@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import * as customerService from './customer.service';
 import twilio from 'twilio';
+import { notifyOrderUpdate } from '../../socket';
 
 // Twilio Config (Set these in .env)
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || '';
@@ -113,9 +114,8 @@ export const placeOrder = async (req: Request, res: Response) => {
 
     const order = await customerService.createPendingOrder(tableId, items, { customerName, customerPhone });
     
-    // TODO: Emit socket event to the specific restaurant room that a new QR order arrived
-    // const io = req.app.get('io');
-    // io.to(`restaurant_${order.restaurantId}`).emit('new_qr_order', order);
+    // Emit socket event for real-time notification to Manager/Kitchen
+    notifyOrderUpdate(order);
 
     res.status(201).json({ success: true, data: order });
   } catch (error: any) {

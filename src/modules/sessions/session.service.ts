@@ -55,14 +55,15 @@ export class SessionService {
           include: {
             items: {
               where: { status: { notIn: ['voided'] } },
-              include: { item: true }
+              include: { item: { select: { name: true, price: true, imageUrl: true } } }
             }
           }
         },
         bills: {
           include: { payments: true }
         }
-      }
+      },
+      orderBy: { openedAt: 'asc' }
     });
   }
 
@@ -129,6 +130,45 @@ export class SessionService {
         data: { tableId: newTableId },
         include: { table: true }
       });
+    });
+  }
+
+  static async cancelSession(restaurantId: string, sessionId: string) {
+    return prisma.$transaction(async (tx) => {
+      const session = await tx.tableSession.findFirst({
+        where: { id: sessionId, table: { restaurantId } },
+        include: { orders: true, bills: true }
+      });
+
+      if (!session) throw new Error('Session not found');
+
+      // Void associated orders
+      await tx.order.updateMany({
+        where: { sessionId },
+        data: { status: 'voided' }
+      });
+
+      // Void associated bills
+      await tx.bill.updateMany({
+        where: { sessionId },
+        data: { status: 'voided' }
+      });
+
+      // Mark session as cancelled
+      await tx.tableSession.update({
+        where: { id: sessionId },
+        data: { status: 'cancelled', closedAt: new Date() }
+      });
+
+      // Reset table status
+      if (session.tableId) {
+        await tx.restaurantTable.update({
+          where: { id: session.tableId },
+          data: { status: 'free' }
+        });
+      }
+
+      return { success: true, message: 'Session cancelled and table freed' };
     });
   }
 }

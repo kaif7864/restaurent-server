@@ -91,7 +91,7 @@ export const createPendingOrder = async (tableIdOrName: string, items: any[], cu
   
   let subtotal = 0;
   for (const item of items) {
-    subtotal += item.price * item.quantity;
+    subtotal += Number(item.price || 0) * Number(item.quantity || 1);
   }
   
   const taxTotal = subtotal * 0.05; // 5% mock tax
@@ -111,16 +111,16 @@ export const createPendingOrder = async (tableIdOrName: string, items: any[], cu
     const updatedOrder = await prisma.order.update({
       where: { id: existingOrder.id },
       data: {
-        subtotal: Number(existingOrder.subtotal) + subtotal,
-        taxTotal: Number(existingOrder.taxTotal) + taxTotal,
-        total: Number(existingOrder.total) + total,
+        subtotal: Number(existingOrder.subtotal || 0) + Number(subtotal),
+        taxTotal: Number(existingOrder.taxTotal || 0) + Number(taxTotal),
+        total: Number(existingOrder.total || 0) + Number(total),
         // If it was already active, leave it active. If it was pending_approval, leave it pending_approval.
         items: {
           create: items.map(item => ({
             itemId: item.itemId,
-            quantity: item.quantity,
-            unitPrice: item.price,
-            totalPrice: item.price * item.quantity,
+            quantity: Number(item.quantity || 1),
+            unitPrice: Number(item.price || 0),
+            totalPrice: Number(item.price || 0) * Number(item.quantity || 1),
             status: 'pending_approval',
           }))
         }

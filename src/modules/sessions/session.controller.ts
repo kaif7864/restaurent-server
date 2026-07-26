@@ -77,3 +77,15 @@ export const transferTable = async (req: Request, res: Response) => {
     res.status(400).json({ success: false, message: error.message });
   }
 };
+
+export const cancelSession = async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.user?.restaurantId;
+    if (!restaurantId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const result = await SessionService.cancelSession(restaurantId, req.params.sessionId);
+    res.json({ success: true, message: result.message });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};

@@ -12,7 +12,22 @@ export class PaymentService {
     }
 
     if (bill.status === 'paid') {
-      throw new Error(`Cannot pay a bill with status ${bill.status}`);
+      // If bill is already paid, close the session and free the table
+      if (bill.sessionId) {
+        await prisma.tableSession.update({
+          where: { id: bill.sessionId },
+          data: { status: 'closed', closedAt: new Date() }
+        });
+      }
+      if (bill.session?.tableId) {
+        await prisma.restaurantTable.update({
+          where: { id: bill.session.tableId },
+          data: { status: 'needs_cleaning' }
+        });
+        const { scheduleTableAutoClean } = require('../tables/tables.service');
+        scheduleTableAutoClean(bill.session.tableId);
+      }
+      return { success: true, message: 'Table session closed successfully' };
     }
 
     // Process payment inside a transaction

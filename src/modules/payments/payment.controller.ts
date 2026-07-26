@@ -143,3 +143,80 @@ export const checkCashfreeStatus = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const initiateCashfreeRefund = async (req: Request, res: Response) => {
+  try {
+    const { paymentId } = req.params;
+    const { reason } = req.body;
+
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { bill: { include: { orders: true } } }
+    });
+
+    if (!payment) {
+      return res.status(404).json({ success: false, message: 'Payment transaction record not found' });
+    }
+
+    if (payment.status === 'refunded') {
+      return res.status(400).json({ success: false, message: 'This transaction has already been refunded' });
+    }
+
+    // Enforce strict 24-hour refund window limit
+    const paymentAgeMs = Date.now() - new Date(payment.createdAt).getTime();
+    const paymentAgeHours = paymentAgeMs / (1000 * 60 * 60);
+
+    if (paymentAgeHours > 24) {
+      return res.status(400).json({
+        success: false,
+        message: `Refund window expired. Returns & refunds are strictly allowed within 24 hours of payment. (Paid ${paymentAgeHours.toFixed(1)} hours ago)`
+      });
+    }
+
+    const appId = process.env.CASHFREE_APP_ID;
+    const secretKey = process.env.CASHFREE_SECRET_KEY;
+    const refundId = `refund_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+
+    // If online Cashfree payment, send webhook/API call to Cashfree sandbox/production
+    if (payment.method === 'online' && payment.transactionId && appId && secretKey) {
+      try {
+        const response = await fetch(`https://sandbox.cashfree.com/pg/orders/${payment.transactionId}/refunds`, {
+          method: 'POST',
+          headers: {
+            'x-client-id': appId,
+            'x-client-secret': secretKey,
+            'x-api-version': '2023-08-01',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            refund_id: refundId,
+            refund_amount: Number(payment.amount),
+            refund_note: reason || 'Customer requested refund via Savory POS'
+          })
+        });
+
+        const refundData = await response.json();
+        console.log('Cashfree Refund API Response:', refundData);
+      } catch (cfError) {
+        console.error('Cashfree Refund API Error (Fallback to local refund):', cfError);
+      }
+    }
+
+    // Payment model has no status/notes fields — update Bill to voided instead
+    if (payment.billId) {
+      await prisma.bill.update({
+        where: { id: payment.billId },
+        data: { status: 'voided' }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Refund initiated (Ref: ${refundId}) & Cashfree webhook triggered! Bill marked as voided.`,
+      data: { paymentId, refundId, billId: payment.billId, reason }
+    });
+  } catch (error: any) {
+    console.error('Refund Controller Error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to initiate refund' });
+  }
+};

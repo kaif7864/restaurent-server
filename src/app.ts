@@ -17,6 +17,8 @@ import analyticsRoutes from './modules/analytics/analytics.routes';
 import inventoryRoutes from './modules/inventory/inventory.routes';
 import kitchenRoutes from './modules/kitchen/kitchen.routes';
 import restaurantRoutes from './modules/restaurants/restaurants.routes';
+import scheduleRoutes from './modules/schedule/schedule.routes';
+import feedbackRoutes from './modules/feedback/feedback.routes';
 
 const app = express();
 
@@ -61,6 +63,8 @@ app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/inventory', inventoryRoutes);
 app.use('/api/v1/kitchen', kitchenRoutes);
 app.use('/api/v1/restaurants', restaurantRoutes);
+app.use('/api/v1/schedule', scheduleRoutes);
+app.use('/api/v1/feedback', feedbackRoutes);
 app.use('/api/v1', paymentRoutes); // Note: payment routes use /orders/:id/payments so it expects /api/v1
 
 // Global Error Handler

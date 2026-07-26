@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { processPayment, getBillPayments, createCashfreeLink, checkCashfreeStatus } from './payment.controller';
+import { processPayment, getBillPayments, createCashfreeLink, checkCashfreeStatus, initiateCashfreeRefund } from './payment.controller';
 import { getActiveSessions, generateBill, getAllBills } from './bill.controller';
 import { requireAuth, requireRole } from '../../middleware/auth.middleware';
 
@@ -10,6 +10,7 @@ router.get('/bills/:id/payments', requireAuth, requireRole(['owner', 'manager', 
 
 router.post('/payments/cashfree-link', requireAuth, requireRole(['owner', 'manager', 'cashier', 'waiter']), createCashfreeLink);
 router.get('/payments/cashfree-status/:linkId', requireAuth, requireRole(['owner', 'manager', 'cashier', 'waiter']), checkCashfreeStatus);
+router.post('/payments/:paymentId/refund', requireAuth, requireRole(['owner', 'manager']), initiateCashfreeRefund);
 
 // Session / Bill Generation routes
 router.get('/sessions/active', requireAuth, requireRole(['owner', 'manager', 'cashier', 'waiter']), getActiveSessions);

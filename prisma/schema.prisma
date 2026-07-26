@@ -29,6 +29,8 @@ model Restaurant {
   kitchenNotes KitchenNote[]
   timeLogs     TimeLog[]
   auditLogs    AuditLog[]
+  schedules    Schedule[]
+  feedbacks    Feedback[]
 }
 
 model User {
@@ -49,6 +51,7 @@ model User {
 
   timeLogs      TimeLog[]
   auditLogs     AuditLog[]
+  schedules     Schedule[]
 }
 
 model RestaurantTable {
@@ -296,3 +299,29 @@ model AuditLog {
   metadata      Json     @default("{}")
   createdAt     DateTime @default(now())
 }
+
+model Schedule {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  shift         String   // morning, evening, night
+  date          DateTime
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Feedback {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  customerName  String
+  customerPhone String?
+  tableNumber   String?
+  rating        Int      @default(5)
+  comment       String?
+  createdAt     DateTime @default(now())
+}
+

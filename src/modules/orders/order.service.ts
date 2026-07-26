@@ -222,9 +222,17 @@ export const getAllOrders = async (restaurantId: string) => {
           }
         }
       },
-      table: true
+      table: true,
+      bill: {
+        include: {
+          payments: {
+            select: { id: true, method: true, transactionId: true, amount: true, createdAt: true }
+          }
+        }
+      }
     },
     orderBy: { createdAt: 'desc' },
     take: 200 // limit to last 200 for performance
   });
 };
+
