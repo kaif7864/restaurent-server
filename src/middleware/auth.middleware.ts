@@ -9,6 +9,10 @@ declare global {
   }
 }
 
+export interface AuthRequest extends Request {
+  user?: JwtPayload;
+}
+
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
