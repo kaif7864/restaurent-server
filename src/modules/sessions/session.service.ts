@@ -7,6 +7,26 @@ export class SessionService {
     const { tableId, guestCount, reservationId, waitlistId } = data;
 
     return await prisma.$transaction(async (tx) => {
+      // Check if table ALREADY has an active session
+      const existingActive = await tx.tableSession.findFirst({
+        where: { tableId, status: 'active' },
+        include: { orders: true, bills: true }
+      });
+
+      if (existingActive) {
+        const activeOrdersCount = existingActive.orders.filter(o => o.status !== 'voided').length;
+        if (activeOrdersCount === 0 && existingActive.bills.length === 0) {
+          // Cancel old empty ghost session
+          await tx.tableSession.update({
+            where: { id: existingActive.id },
+            data: { status: 'cancelled', closedAt: new Date() }
+          });
+        } else {
+          // Reuse existing active session!
+          return existingActive;
+        }
+      }
+
       // Create session
       const session = await tx.tableSession.create({
         data: {
@@ -43,7 +63,18 @@ export class SessionService {
   }
 
   static async getActiveSessions(restaurantId: string) {
-    return prisma.tableSession.findMany({
+    // 1. Auto-cleanup empty ghost active sessions (0 orders & 0 bills)
+    await prisma.tableSession.updateMany({
+      where: {
+        status: 'active',
+        table: { restaurantId },
+        orders: { none: {} },
+        bills: { none: {} }
+      },
+      data: { status: 'cancelled', closedAt: new Date() }
+    });
+
+    const sessions = await prisma.tableSession.findMany({
       where: {
         status: 'active',
         table: { restaurantId }
@@ -63,8 +94,43 @@ export class SessionService {
           include: { payments: true }
         }
       },
-      orderBy: { openedAt: 'asc' }
+      orderBy: { openedAt: 'desc' }
     });
+
+    // For any session where session.orders is empty, fetch table orders for tableId!
+    for (const session of sessions) {
+      if (!session.orders || session.orders.length === 0) {
+        const tableOrders = await prisma.order.findMany({
+          where: {
+            tableId: session.tableId,
+            status: { notIn: ['voided'] }
+          },
+          include: {
+            items: {
+              where: { status: { notIn: ['voided'] } },
+              include: { item: { select: { name: true, price: true, imageUrl: true } } }
+            }
+          }
+        });
+        session.orders = tableOrders as any;
+      }
+    }
+
+    // Deduplicate sessions per table: keep the session with non-zero orders or latest timestamp
+    const tableMap = new Map<string, typeof sessions[0]>();
+    sessions.forEach(s => {
+      const tId = s.tableId;
+      if (!tableMap.has(tId)) {
+        tableMap.set(tId, s);
+      } else {
+        const existing = tableMap.get(tId)!;
+        if (s.orders.length > existing.orders.length) {
+          tableMap.set(tId, s);
+        }
+      }
+    });
+
+    return Array.from(tableMap.values());
   }
 
   static async generateBill(restaurantId: string, sessionId: string, discount: number = 0, tip: number = 0) {
@@ -137,10 +203,27 @@ export class SessionService {
     return prisma.$transaction(async (tx) => {
       const session = await tx.tableSession.findFirst({
         where: { id: sessionId, table: { restaurantId } },
-        include: { orders: true, bills: true }
+        include: {
+          orders: true,
+          bills: {
+            include: { payments: true }
+          }
+        }
       });
 
       if (!session) throw new Error('Session not found');
+
+      // BUG 9: Block cancellation if any bill has completed/pending payments
+      const billsWithPayments = session.bills.filter(
+        (b: any) => b.payments && b.payments.length > 0 &&
+          b.payments.some((p: any) => p.status === 'completed' || p.status === 'pending')
+      );
+
+      if (billsWithPayments.length > 0) {
+        throw new Error(
+          'Cannot cancel session with existing payments. Please process a refund first before cancelling.'
+        );
+      }
 
       // Void associated orders
       await tx.order.updateMany({
@@ -148,7 +231,7 @@ export class SessionService {
         data: { status: 'voided' }
       });
 
-      // Void associated bills
+      // Void associated bills (safe — we verified no payments exist)
       await tx.bill.updateMany({
         where: { sessionId },
         data: { status: 'voided' }

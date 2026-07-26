@@ -111,6 +111,7 @@ router.get('/history', requireRole(['owner', 'manager']), orderController.getAll
 router.patch('/items/:itemId/status', requireRole(['cook', 'bartender', 'expo', 'kitchen', 'manager', 'owner', 'waiter']), orderController.updateItemStatus);
 
 router.patch('/:orderId/status', requireRole(['expo', 'manager', 'owner', 'waiter']), orderController.updateOrderStatus);
+router.put('/:orderId/status', requireRole(['expo', 'manager', 'owner', 'waiter']), orderController.updateOrderStatus);
 router.post('/:orderId/pay', requireRole(['manager', 'owner', 'cashier']), orderController.payDirectOrder);
 
 export default router;

@@ -65,7 +65,8 @@ app.use('/api/v1/kitchen', kitchenRoutes);
 app.use('/api/v1/restaurants', restaurantRoutes);
 app.use('/api/v1/schedule', scheduleRoutes);
 app.use('/api/v1/feedback', feedbackRoutes);
-app.use('/api/v1', paymentRoutes); // Note: payment routes use /orders/:id/payments so it expects /api/v1
+app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1', paymentRoutes);
 
 // Global Error Handler
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

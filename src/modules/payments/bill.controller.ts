@@ -20,6 +20,10 @@ export const getActiveSessions = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * BUG 8: Now passes discount and tip from request body to BillService.generateBill.
+ * Previously these values were ignored even though the frontend sent them.
+ */
 export const generateBill = async (req: Request, res: Response) => {
   try {
     const { sessionId } = req.params;
@@ -27,7 +31,13 @@ export const generateBill = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Session ID is required' });
     }
 
-    const bill = await BillService.generateBill(sessionId);
+    const { discount, tip } = req.body;
+
+    const bill = await BillService.generateBill(
+      sessionId,
+      Number(discount) || 0,
+      Number(tip) || 0
+    );
 
     return res.status(200).json({
       success: true,

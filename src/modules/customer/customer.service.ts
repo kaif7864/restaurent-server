@@ -1,5 +1,6 @@
 import prisma from '../../config/prisma';
 import jwt from 'jsonwebtoken';
+import { DEFAULT_TAX_RATE } from '../../config/business';
 
 // Use a distinct secret for customer tokens if possible, or same as staff for now
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
@@ -94,8 +95,23 @@ export const createPendingOrder = async (tableIdOrName: string, items: any[], cu
     subtotal += Number(item.price || 0) * Number(item.quantity || 1);
   }
   
-  const taxTotal = subtotal * 0.05; // 5% mock tax
+  const taxTotal = subtotal * DEFAULT_TAX_RATE;
   const total = subtotal + taxTotal;
+
+  // 3-second Idempotency Guard: Prevent duplicate order item additions from rapid taps
+  const threeSecondsAgo = new Date(Date.now() - 3000);
+  const recentSameOrder = await prisma.order.findFirst({
+    where: {
+      tableId: table.id,
+      createdAt: { gte: threeSecondsAgo },
+      subtotal: { gte: subtotal - 0.01, lte: subtotal + 0.01 }
+    },
+    include: { items: true }
+  });
+  if (recentSameOrder) {
+    console.log(`[Idempotency] Blocked duplicate customer order submission within 3s for table ${table.id}`);
+    return recentSameOrder;
+  }
 
   // Check if there is already an active or pending order for this table
   const existingOrder = await prisma.order.findFirst({
@@ -111,6 +127,7 @@ export const createPendingOrder = async (tableIdOrName: string, items: any[], cu
     const updatedOrder = await prisma.order.update({
       where: { id: existingOrder.id },
       data: {
+        status: 'pending_approval',
         subtotal: Number(existingOrder.subtotal || 0) + Number(subtotal),
         taxTotal: Number(existingOrder.taxTotal || 0) + Number(taxTotal),
         total: Number(existingOrder.total || 0) + Number(total),
@@ -183,25 +200,24 @@ export const getTableOrders = async (tableIdOrName: string, phone?: string) => {
   let orders = await prisma.order.findMany({
     where: {
       tableId: table.id,
-      status: {
-        notIn: ['paid'] // We include 'voided' so the frontend can show the Rejected screen
-      }
     },
     include: {
       items: {
         include: {
           item: true
         }
+      },
+      bill: {
+        include: { payments: true }
       }
     },
     orderBy: { createdAt: 'desc' }
   });
 
   if (phone) {
-    // Filter orders to only include those that belong to this phone number
     orders = orders.filter((o: any) => {
       const orderPhone = o.metadata?.customerPhone;
-      return orderPhone === phone;
+      return !orderPhone || orderPhone === phone;
     });
   }
 

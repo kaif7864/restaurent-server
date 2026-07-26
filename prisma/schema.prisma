@@ -171,7 +171,7 @@ model Bill {
   restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
   sessionId     String
   session       TableSession @relation(fields: [sessionId], references: [id])
-  status        String   @default("open") // open, generated, payment_pending, paid
+  status        String   @default("open") // open, generated, payment_pending, paid, payment_discrepancy, voided
   subtotal      Decimal  @default(0) @db.Decimal(10, 2)
   taxTotal      Decimal  @default(0) @db.Decimal(10, 2)
   discount      Decimal  @default(0) @db.Decimal(10, 2)
@@ -208,9 +208,12 @@ model Payment {
   billId        String
   bill          Bill     @relation(fields: [billId], references: [id])
   amount        Decimal  @db.Decimal(10, 2)
-  method        String   // cash, card, upi
-  status        String   @default("completed") // pending, completed, failed, refunded
+  method        String   // cash, card, upi, online
+  status        String   @default("completed") // pending, pending_review, completed, failed, refunded, reversed, pending_return
+  type          String   @default("single") // single, split, double_candidate
   transactionId String?
+  notes         String?
+  metadata      Json     @default("{}")
   createdAt     DateTime @default(now())
 }
 

@@ -38,3 +38,10 @@ export const notifyOrderUpdate = (data: any) => {
     io.emit('order-updated', data);
   }
 };
+
+export const notifyWaiterCall = (data: any) => {
+  if (io) {
+    io.emit('waiter:called', data);
+    io.emit('waiter-called', data);
+  }
+};

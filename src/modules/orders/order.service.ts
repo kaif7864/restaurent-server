@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const TAX_RATE = 0.05; // 5% GST
+import { DEFAULT_TAX_RATE } from '../../config/business';
+
+const TAX_RATE = DEFAULT_TAX_RATE;
 
 export const createOrder = async (restaurantId: string, data: any) => {
   const { tableId, orderType, items } = data;
@@ -50,6 +52,24 @@ export const createOrder = async (restaurantId: string, data: any) => {
 
   const taxTotal = subtotal * TAX_RATE;
   const total = subtotal + taxTotal;
+
+  // 3-second Idempotency Check: Prevent duplicate order creation on rapid double-clicks
+  if (tableId) {
+    const threeSecondsAgo = new Date(Date.now() - 3000);
+    const recentOrder = await prisma.order.findFirst({
+      where: {
+        tableId,
+        restaurantId,
+        createdAt: { gte: threeSecondsAgo },
+        subtotal: subtotal
+      },
+      include: { items: { include: { item: true } }, table: true }
+    });
+    if (recentOrder) {
+      console.log(`[Idempotency] Duplicate order submission blocked within 3s for table ${tableId}`);
+      return recentOrder;
+    }
+  }
 
   // Handle Table Session logic
   let sessionId = data.sessionId || null;
@@ -110,7 +130,7 @@ export const getActiveOrders = async (restaurantId: string, type?: 'food' | 'dri
   const orders = await prisma.order.findMany({
     where: { 
       restaurantId,
-      status: { notIn: ['paid', 'voided'] },
+      status: { notIn: ['paid', 'voided', 'closed', 'completed'] },
       ...(type && type !== 'all' ? {
         items: {
           some: { item: { category: { type } } }
@@ -137,7 +157,7 @@ export const getActiveOrders = async (restaurantId: string, type?: 'food' | 'dri
   return orders;
 };
 
-export const updateOrderItemStatus = async (restaurantId: string, orderItemId: string, status: string) => {
+export const updateOrderItemStatus = async (restaurantId: string, orderItemId: string, status: string, rejectionReason?: string) => {
   const item = await prisma.orderItem.findFirst({
     where: {
       id: orderItemId,
@@ -148,9 +168,13 @@ export const updateOrderItemStatus = async (restaurantId: string, orderItemId: s
 
   if (!item) throw new Error('Order item not found');
 
+  const existingMeta = (item.metadata as any) || {};
   const updatedItem = await prisma.orderItem.update({
     where: { id: orderItemId },
-    data: { status }
+    data: { 
+      status,
+      ...(rejectionReason ? { metadata: { ...existingMeta, rejectionReason } } : {})
+    }
   });
 
   // Re-evaluate parent order status based on all items
@@ -182,7 +206,7 @@ export const updateOrderItemStatus = async (restaurantId: string, orderItemId: s
   return updatedItem;
 };
 
-export const updateOrderStatus = async (restaurantId: string, orderId: string, status: string) => {
+export const updateOrderStatus = async (restaurantId: string, orderId: string, status: string, rejectionReason?: string) => {
   const order = await prisma.order.findFirst({
     where: {
       id: orderId,
@@ -194,18 +218,117 @@ export const updateOrderStatus = async (restaurantId: string, orderId: string, s
   if (!order) throw new Error('Order not found');
 
   return await prisma.$transaction(async (tx) => {
-    const updatedOrder = await tx.order.update({
-      where: { id: orderId },
-      data: { status }
-    });
+    if (status === 'sent' || status === 'preparing') {
+      // Approve all pending_approval items to sent
+      await tx.orderItem.updateMany({
+        where: { orderId: orderId, status: 'pending_approval' },
+        data: { status: 'sent' }
+      });
 
-    // If order is served or ready_to_serve, mark items accordingly
+      // Update parent order status to sent/preparing
+      const updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: { status: 'sent' },
+        include: { items: { include: { item: true } }, table: true }
+      });
+      return updatedOrder;
+    } 
+    
+    if (status === 'voided') {
+      const existingOrderMeta = (order.metadata as any) || {};
+
+      // Check if there are already approved items in the kitchen/served state
+      const approvedItems = order.items.filter(i => ['sent', 'preparing', 'ready', 'served', 'active'].includes(i.status));
+      const pendingItems = order.items.filter(i => i.status === 'pending_approval');
+
+      // Safety Guard: If pending items were ALREADY approved by a parallel call, ignore conflicting reject request
+      if (pendingItems.length === 0 && approvedItems.length > 0) {
+        console.log(`[OrderLock] Conflicting reject call ignored for order ${orderId} as pending items were already approved.`);
+        const currentOrder = await tx.order.findUnique({
+          where: { id: orderId },
+          include: { items: { include: { item: true } }, table: true }
+        });
+        return currentOrder;
+      }
+
+      if (approvedItems.length > 0) {
+        // ONLY void the pending_approval items! Do NOT void already approved kitchen items!
+        for (const pItem of pendingItems) {
+          const itemMeta = (pItem.metadata as any) || {};
+          await tx.orderItem.update({
+            where: { id: pItem.id },
+            data: { 
+              status: 'voided',
+              metadata: { ...itemMeta, rejectionReason: rejectionReason || 'Item Out of Stock' }
+            }
+          });
+        }
+
+        // Recalculate order subtotal and total based on remaining non-voided items
+        const remainingItems = await tx.orderItem.findMany({
+          where: { orderId: orderId, status: { not: 'voided' } }
+        });
+
+        let newSubtotal = 0;
+        for (const item of remainingItems) {
+          newSubtotal += Number(item.totalPrice || 0);
+        }
+        const newTaxTotal = newSubtotal * DEFAULT_TAX_RATE;
+        const newTotal = newSubtotal + newTaxTotal;
+
+        // Parent order remains active/sent for the already approved items
+        const updatedOrder = await tx.order.update({
+          where: { id: orderId },
+          data: {
+            status: 'sent',
+            subtotal: newSubtotal,
+            taxTotal: newTaxTotal,
+            total: newTotal
+          },
+          include: { items: { include: { item: true } }, table: true }
+        });
+        return updatedOrder;
+      } else {
+        // No prior approved items exist — void entire new order
+        for (const pItem of order.items) {
+          const itemMeta = (pItem.metadata as any) || {};
+          await tx.orderItem.update({
+            where: { id: pItem.id },
+            data: { 
+              status: 'voided',
+              metadata: { ...itemMeta, rejectionReason: rejectionReason || 'Order Cancelled' }
+            }
+          });
+        }
+
+        const updatedOrder = await tx.order.update({
+          where: { id: orderId },
+          data: { 
+            status: 'voided',
+            metadata: { 
+              ...existingOrderMeta, 
+              rejectionReason: rejectionReason || 'Order Cancelled by Restaurant', 
+              voidReason: rejectionReason || 'Order Cancelled by Restaurant' 
+            }
+          },
+          include: { items: { include: { item: true } }, table: true }
+        });
+        return updatedOrder;
+      }
+    }
+
     if (status === 'served' || status === 'ready_to_serve') {
       await tx.orderItem.updateMany({
-        where: { orderId: orderId, status: { not: status } },
+        where: { orderId: orderId, status: { notIn: ['voided', status] } },
         data: { status }
       });
     }
+
+    const updatedOrder = await tx.order.update({
+      where: { id: orderId },
+      data: { status },
+      include: { items: { include: { item: true } }, table: true }
+    });
 
     return updatedOrder;
   });

@@ -21,4 +21,7 @@ router.get('/orders/:tableId', customerController.getTableOrders);
 router.post('/orders/:orderId/pay-online', customerController.payOrderOnline);
 router.post('/orders/:orderId/verify-payment', customerController.verifyOrderPayment);
 
+// 6. Submit feedback
+router.post('/feedback', customerController.submitCustomerFeedback);
+
 export default router;

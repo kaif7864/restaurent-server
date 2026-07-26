@@ -4,6 +4,9 @@ import * as tableController from './tables.controller';
 
 const router = Router();
 
+// Public route for Customer QR App to call waiter
+router.post('/:id/call-waiter', tableController.callWaiter);
+
 router.use(requireAuth);
 
 /**
@@ -57,5 +60,6 @@ router.put('/:id', requireRole(['owner', 'manager', 'host', 'waiter']), tableCon
  *         description: Table deleted
  */
 router.delete('/:id', requireRole(['owner', 'manager']), tableController.deleteTable);
+router.post('/:id/call-waiter', tableController.callWaiter);
 
 export default router;

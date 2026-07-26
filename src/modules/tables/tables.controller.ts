@@ -61,3 +61,52 @@ export const deleteTable = async (req: Request, res: Response) => {
     res.status(statusCode).json({ success: false, message: error.message });
   }
 };
+
+export const callWaiter = async (req: Request, res: Response) => {
+  try {
+    const { id: paramId } = req.params;
+    const prisma = require('../../config/prisma').default;
+    
+    let table = await prisma.restaurantTable.findUnique({ where: { id: paramId } }).catch(() => null);
+
+    // Extract base table name e.g. "T-01_old_18b0a" -> "01"
+    const cleanedCode = paramId ? paramId.split('_old_')[0].replace(/^T-?/i, '') : '01';
+
+    // If table not found or table is marked _old_, search for the active floor table
+    if (!table || table.name.includes('_old_')) {
+      const activeTable = await prisma.restaurantTable.findFirst({
+        where: {
+          OR: [
+            { name: cleanedCode },
+            { name: `T-${cleanedCode}` },
+            { name: { equals: cleanedCode, mode: 'insensitive' } },
+            { name: { startsWith: cleanedCode, mode: 'insensitive' } }
+          ],
+          NOT: { name: { contains: '_old_' } }
+        }
+      });
+      if (activeTable) {
+        table = activeTable;
+      }
+    }
+
+    let baseName = table?.name ? table.name.split('_old_')[0] : cleanedCode;
+    baseName = baseName.replace(/^T-?/i, '');
+
+    const formattedTableName = `T-${baseName}`;
+
+    const data = {
+      tableId: table?.id || paramId,
+      tableName: formattedTableName,
+      restaurantId: table?.restaurantId,
+      timestamp: new Date().toISOString()
+    };
+
+    const { notifyWaiterCall } = require('../../socket');
+    notifyWaiterCall(data);
+
+    res.json({ success: true, message: `Waiter notified for Table ${formattedTableName}`, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

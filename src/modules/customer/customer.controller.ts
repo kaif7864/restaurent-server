@@ -237,63 +237,123 @@ export const verifyOrderPayment = async (req: Request, res: Response) => {
 
       const existingOrder = await prisma.order.findUnique({ 
         where: { id: orderId },
-        include: { items: { include: { item: true } } }
+        include: { items: { include: { item: true } }, bill: { include: { payments: true } } }
       });
-      if (existingOrder && existingOrder.status !== 'paid') {
-        // Ensure there is an active session
-        let session = await prisma.tableSession.findFirst({
-          where: { tableId: existingOrder.tableId, status: 'active' }
-        });
-        
-        if (!session) {
-          session = await prisma.tableSession.create({
-            data: {
-              table: { connect: { id: existingOrder.tableId } },
-              status: 'active',
-              guestCount: 1,
-              openedAt: new Date(),
+
+      if (existingOrder) {
+        let billId = existingOrder.billId;
+
+        // If no bill exists yet, find or create one
+        if (!billId) {
+          // Find existing bill for session or table
+          const existingBill = await prisma.bill.findFirst({
+            where: {
+              OR: [
+                { sessionId: existingOrder.sessionId ?? undefined },
+                { session: { tableId: existingOrder.tableId ?? undefined } }
+              ]
+            },
+            orderBy: { createdAt: 'desc' }
+          });
+
+          if (existingBill) {
+            billId = existingBill.id;
+            await prisma.order.update({
+              where: { id: orderId },
+              data: { billId: existingBill.id }
+            });
+          } else {
+            let session = existingOrder.tableId ? await prisma.tableSession.findFirst({
+              where: { tableId: existingOrder.tableId },
+              orderBy: { openedAt: 'desc' }
+            }) : null;
+            
+            if (!session) {
+              session = await (prisma as any).tableSession.create({
+                data: {
+                  tableId: existingOrder.tableId,
+                  status: 'closed',
+                  closedAt: new Date(),
+                  guestCount: 1,
+                  openedAt: new Date(),
+                }
+              });
             }
+
+            const bill = await prisma.bill.create({
+              data: {
+                restaurant: { connect: { id: existingOrder.restaurantId } },
+                session: { connect: { id: session!.id } },
+                status: 'paid',
+                subtotal: existingOrder.subtotal,
+                taxTotal: existingOrder.taxTotal,
+                total: existingOrder.total
+              }
+            });
+            billId = bill.id;
+
+            await prisma.order.update({
+              where: { id: orderId },
+              data: { billId: bill.id }
+            });
+          }
+        }
+
+        // Check existing payments on this bill
+        const currentBill = await prisma.bill.findUnique({
+          where: { id: billId! },
+          include: { payments: true }
+        });
+
+        const hasCompletedPayment = currentBill?.payments.some((p: any) => p.status === 'completed');
+
+        // 5-second idempotency check for parallel requests
+        const existingPayment = await prisma.payment.findFirst({
+          where: {
+            OR: [
+              { transactionId: linkId },
+              { billId: billId!, method: 'online', createdAt: { gte: new Date(Date.now() - 5000) } }
+            ]
+          }
+        });
+
+        if (!existingPayment) {
+          const isDoublePayment = hasCompletedPayment || currentBill?.status === 'paid';
+
+          await prisma.payment.create({
+            data: {
+              bill: { connect: { id: billId! } },
+              amount: existingOrder.total,
+              method: 'online',
+              status: isDoublePayment ? 'pending_review' : 'completed',
+              type: isDoublePayment ? 'double_candidate' : 'single',
+              transactionId: linkId,
+              notes: isDoublePayment ? 'Double Payment Detected: Online payment completed after Cash payment.' : undefined
+            }
+          });
+
+          await prisma.bill.update({
+            where: { id: billId! },
+            data: { status: isDoublePayment ? 'payment_discrepancy' : 'paid' }
+          });
+
+          await prisma.order.update({
+            where: { id: orderId },
+            data: { status: 'paid' }
           });
         }
 
-        // Create a bill for this online payment
-        const bill = await prisma.bill.create({
-          data: {
-            restaurant: { connect: { id: existingOrder.restaurantId } },
-            session: { connect: { id: session.id } },
-            status: 'paid',
-            subtotal: existingOrder.subtotal,
-            taxTotal: existingOrder.taxTotal,
-            total: existingOrder.total
-          }
-        });
-
-        // Create a payment record
-        await prisma.payment.create({
-          data: {
-            bill: { connect: { id: bill.id } },
-            amount: existingOrder.total,
-            method: 'online',
-            status: 'completed',
-            transactionId: linkId
-          }
-        });
-
-        await prisma.order.update({
-          where: { id: orderId },
-          data: { 
-            status: 'paid',
-            billId: bill.id 
-          }
-        });
-        
-        await prisma.restaurantTable.update({
-          where: { id: existingOrder.tableId },
-          data: { status: 'needs_cleaning' }
-        });
-
-        const { scheduleTableAutoClean } = require('../tables/tables.service');
-        scheduleTableAutoClean(existingOrder.tableId);
+        // Notify POS socket listeners of order update
+        try {
+          const { notifyOrderUpdate } = require('../../socket');
+          notifyOrderUpdate({
+            ...existingOrder,
+            isDoublePayment: hasCompletedPayment,
+            billStatus: hasCompletedPayment ? 'payment_discrepancy' : 'paid'
+          });
+        } catch (e) {
+          // socket fallback
+        }
       }
       return res.json({ success: true, message: 'Payment successful', status: 'PAID', order: existingOrder });
     }
@@ -301,6 +361,42 @@ export const verifyOrderPayment = async (req: Request, res: Response) => {
     return res.json({ success: true, status: 'PENDING' }); // In real app, we'd return data.link_status
   } catch (error: any) {
     console.error('verifyOrderPayment error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
+
+export const submitCustomerFeedback = async (req: Request, res: Response) => {
+  try {
+    const { tableId, customerName, customerPhone, rating, comment } = req.body;
+    const { FeedbackService } = require('../feedback/feedback.service');
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+
+    const table = await prisma.restaurantTable.findFirst({
+      where: {
+        OR: [
+          ...(isUUID(tableId) ? [{ id: tableId }] : []),
+          { name: tableId }
+        ]
+      }
+    });
+
+    const restaurantId = table?.restaurantId;
+    if (!restaurantId) throw new Error('Restaurant not found for table');
+
+    const feedback = await FeedbackService.createFeedback(restaurantId, {
+      customerName: customerName || 'Guest',
+      customerPhone,
+      tableNumber: table.name,
+      rating: Number(rating || 5),
+      comment: comment || ''
+    });
+
+    res.status(201).json({ success: true, data: feedback });
+  } catch (error: any) {
+    console.error('submitCustomerFeedback error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
