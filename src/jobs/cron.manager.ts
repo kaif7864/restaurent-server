@@ -3,6 +3,7 @@ import { runSessionCleanupWorker } from './workers/sessionCleanup.worker';
 import { runOrderCleanupWorker } from './workers/orderCleanup.worker';
 import { runInventoryAlertWorker } from './workers/inventoryAlert.worker';
 import { runDailyEodWorker } from './workers/dailyEod.worker';
+import { runHeartbeatLog, runSelfPingWorker } from './workers/keepAlive.worker';
 
 /**
  * Central Cron Job Manager
@@ -19,22 +20,32 @@ export class CronManager {
 
     console.log('🚀 [CronManager] Initializing background cron jobs...');
 
-    // Job 1: Table Session & Auto-Clean Worker (Every 5 minutes)
+    // Job 0: Live Ping Heartbeat Console Logger (Every 2 minutes)
+    cron.schedule('*/2 * * * *', () => {
+      runHeartbeatLog();
+    });
+
+    // Job 1: Self-Ping HTTP Keep-Alive Worker (Every 10 minutes)
+    cron.schedule('*/10 * * * *', async () => {
+      await runSelfPingWorker();
+    });
+
+    // Job 2: Table Session & Auto-Clean Worker (Every 5 minutes)
     cron.schedule('*/5 * * * *', async () => {
       await runSessionCleanupWorker();
     });
 
-    // Job 2: Expired Pending Order Auto-Void Worker (Every 15 minutes)
+    // Job 3: Expired Pending Order Auto-Void Worker (Every 15 minutes)
     cron.schedule('*/15 * * * *', async () => {
       await runOrderCleanupWorker();
     });
 
-    // Job 3: Low-Stock Inventory Warning Alert Worker (Every 1 hour)
+    // Job 4: Low-Stock Inventory Warning Alert Worker (Every 1 hour)
     cron.schedule('0 * * * *', async () => {
       await runInventoryAlertWorker();
     });
 
-    // Job 4: Daily Midnight EOD Maintenance & Cleanup Worker (At 00:00 Daily)
+    // Job 5: Daily Midnight EOD Maintenance & Cleanup Worker (At 00:00 Daily)
     cron.schedule('0 0 * * *', async () => {
       await runDailyEodWorker();
     });
@@ -46,7 +57,7 @@ export class CronManager {
   /**
    * Run a specific worker manually (useful for testing or manual triggers)
    */
-  public static async runManually(jobName: 'sessionCleanup' | 'orderCleanup' | 'inventoryAlert' | 'dailyEod') {
+  public static async runManually(jobName: 'sessionCleanup' | 'orderCleanup' | 'inventoryAlert' | 'dailyEod' | 'selfPing') {
     switch (jobName) {
       case 'sessionCleanup':
         return await runSessionCleanupWorker();
@@ -56,6 +67,8 @@ export class CronManager {
         return await runInventoryAlertWorker();
       case 'dailyEod':
         return await runDailyEodWorker();
+      case 'selfPing':
+        return await runSelfPingWorker();
     }
   }
 }
