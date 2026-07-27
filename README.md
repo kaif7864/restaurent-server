@@ -47,6 +47,12 @@ src/
   - `table:updated` / `session:closed` ➔ Floor plan real-time sync.
   - `waiter:call` / `bill:request` ➔ Instant Manager Topbar notifications.
 
+### ⏱️ 4. Automated Background Cron Jobs (`node-cron`)
+- **Stale Session & Table Auto-Clean** (`*/5 * * * *`): Automatically resets table statuses (`occupied` ➔ `available`) after session closure and auto-clean timeout.
+- **Unapproved Order Auto-Void** (`*/15 * * * *`): Voids unapproved pending QR orders older than 30 minutes with structured auto-expire notes.
+- **Low-Stock Inventory Warnings** (`0 * * * *`): Hourly scan for ingredient stock levels below `minStock` threshold with real-time WebSocket alerts to KDS.
+- **Daily EOD Maintenance** (`0 0 * * *`): Midnight cleanup of expired audit logs and daily financial data maintenance.
+
 ---
 
 ## 🛠️ Tech Stack

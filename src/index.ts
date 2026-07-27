@@ -2,6 +2,7 @@ import http from 'http';
 import dotenv from 'dotenv';
 import app from './app';
 import { initSocket } from './socket';
+import { CronManager } from './jobs/cron.manager';
 
 // Load env vars
 dotenv.config();
@@ -11,6 +12,9 @@ const server = http.createServer(app);
 
 // Initialize Socket.io
 initSocket(server);
+
+// Initialize Background Cron Jobs
+CronManager.init();
 
 // Graceful Shutdown
 const gracefulShutdown = () => {
